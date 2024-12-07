@@ -81,6 +81,7 @@ async function main () {
   const repo = github.context.repo.repo
   const currentISODate = (new Date()).toISOString().substring(0, 10)
 
+  core.info(`### TEST ###`)
   let latestTag = null
   let previousTag = null
 
