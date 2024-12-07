@@ -205,7 +205,7 @@ async function main () {
           author: _.get(commit, 'author.login'),
           authorUrl: _.get(commit, 'author.html_url')
         })
-        core.info(`[OK] Commit ${commit.sha} with invalid type, falling back to other - ${commit.commit.message}`)
+        core.info(`### RADH ### [OK] Commit ${commit.sha} with invalid type, falling back to other - ${commit.commit.message}`)
       } else {
         core.info(`[INVALID] Skipping commit ${commit.sha} as it doesn't follow conventional commit format.`)
       }
