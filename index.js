@@ -81,19 +81,20 @@ async function main () {
   const repo = github.context.repo.repo
   const currentISODate = (new Date()).toISOString().substring(0, 10)
 
-  core.info(`### TEST ###`)
   let latestTag = null
   let previousTag = null
 
   if (tag && (fromTag || toTag)) {
-    return core.setFailed(`Must provide EITHER input tag OR (fromTag and toTag), not both!`)
+    return core.setFailed(
+      `Must provide EITHER input tag OR (fromTag and toTag), not both!`
+    );
   } else if (tag) {
-
     // GET LATEST + PREVIOUS TAGS
 
-    core.info(`### RADH ### Using input tag: ${tag}`)
+    core.info(`Using input tag: ${tag}`);
 
-    const tagsRaw = await gh.graphql(`
+    const tagsRaw = await gh.graphql(
+      `
       query lastTags ($owner: String!, $repo: String!) {
         repository (owner: $owner, name: $repo) {
           refs(first: 2, refPrefix: "refs/tags/", orderBy: { field: TAG_COMMIT_DATE, direction: DESC }) {
@@ -106,108 +107,128 @@ async function main () {
           }
         }
       }
-    `, {
-      owner,
-      repo
-    })
+    `,
+      {
+        owner,
+        repo,
+      }
+    );
 
-    latestTag = _.get(tagsRaw, 'repository.refs.nodes[0]')
-    previousTag = _.get(tagsRaw, 'repository.refs.nodes[1]')
+    latestTag = _.get(tagsRaw, "repository.refs.nodes[0]");
+    previousTag = _.get(tagsRaw, "repository.refs.nodes[1]");
 
     if (!latestTag) {
-      return core.setFailed('Couldn\'t find the latest tag. Make sure you have an existing tag already before creating a new one.')
+      return core.setFailed(
+        "Couldn't find the latest tag. Make sure you have an existing tag already before creating a new one."
+      );
     }
     if (!previousTag) {
-      return core.setFailed('Couldn\'t find a previous tag. Make sure you have at least 2 tags already (current tag + previous initial tag).')
+      return core.setFailed(
+        "Couldn't find a previous tag. Make sure you have at least 2 tags already (current tag + previous initial tag)."
+      );
     }
 
     if (latestTag.name !== tag) {
-      return core.setFailed(`Provided tag doesn\'t match latest tag ${tag}.`)
+      return core.setFailed(
+        `Provided tag(${tag}) doesn\'t match latest tag ${latestTag.name}.`
+      );
     }
 
-    core.info(`Using latest tag: ${latestTag.name}`)
-    core.info(`Using previous tag: ${previousTag.name}`)
+    core.info(`Using latest tag: ${latestTag.name}`);
+    core.info(`Using previous tag: ${previousTag.name}`);
   } else if (fromTag && toTag) {
-
     // GET FROM + TO TAGS FROM INPUTS
 
-    latestTag = { name: fromTag }
-    previousTag = { name: toTag }
+    latestTag = { name: fromTag };
+    previousTag = { name: toTag };
 
-    core.info(`Using tag range: ${fromTag} to ${toTag}`)
+    core.info(`Using tag range: ${fromTag} to ${toTag}`);
   } else {
-    return core.setFailed(`Must provide either input tag OR (fromTag and toTag). None were provided!`)
+    return core.setFailed(
+      `Must provide either input tag OR (fromTag and toTag). None were provided!`
+    );
   }
 
   // GET COMMITS
 
-  let curPage = 0
-  let totalCommits = 0
-  let hasMoreCommits = false
-  const commits = []
+  let curPage = 0;
+  let totalCommits = 0;
+  let hasMoreCommits = false;
+  const commits = [];
   do {
-    hasMoreCommits = false
-    curPage++
+    hasMoreCommits = false;
+    curPage++;
     const commitsRaw = await gh.rest.repos.compareCommitsWithBasehead({
       owner,
       repo,
       basehead: `${previousTag.name}...${latestTag.name}`,
       page: curPage,
-      per_page: 100
-    })
-    totalCommits = _.get(commitsRaw, 'data.total_commits', 0)
-    const rangeCommits = _.get(commitsRaw, 'data.commits', [])
-    commits.push(...rangeCommits)
+      per_page: 100,
+    });
+    totalCommits = _.get(commitsRaw, "data.total_commits", 0);
+    const rangeCommits = _.get(commitsRaw, "data.commits", []);
+    commits.push(...rangeCommits);
     if ((curPage - 1) * 100 + rangeCommits.length < totalCommits) {
-      hasMoreCommits = true
+      hasMoreCommits = true;
     }
-  } while (hasMoreCommits)
+  } while (hasMoreCommits);
 
   if (!commits || commits.length < 1) {
-    return core.setFailed('Couldn\'t find any commits between latest and previous tags.')
+    return core.setFailed(
+      "Couldn't find any commits between latest and previous tags."
+    );
   }
 
   // PARSE COMMITS
 
-  const commitsParsed = []
-  const breakingChanges = []
+  const commitsParsed = [];
+  const breakingChanges = [];
   for (const commit of commits) {
     try {
-      const cAst = cc.toConventionalChangelogFormat(cc.parser(commit.commit.message))
+      const cAst = cc.toConventionalChangelogFormat(
+        cc.parser(commit.commit.message)
+      );
       commitsParsed.push({
         ...cAst,
         type: cAst.type.toLowerCase(),
         sha: commit.sha,
         url: commit.html_url,
-        author: _.get(commit, 'author.login'),
-        authorUrl: _.get(commit, 'author.html_url')
-      })
+        author: _.get(commit, "author.login"),
+        authorUrl: _.get(commit, "author.html_url"),
+      });
       for (const note of cAst.notes) {
-        if (note.title === 'BREAKING CHANGE') {
+        if (note.title === "BREAKING CHANGE") {
           breakingChanges.push({
             sha: commit.sha,
             url: commit.html_url,
             subject: cAst.subject,
-            author: _.get(commit, 'author.login'),
-            authorUrl: _.get(commit, 'author.html_url'),
-            text: note.text
-          })
+            author: _.get(commit, "author.login"),
+            authorUrl: _.get(commit, "author.html_url"),
+            text: note.text,
+          });
         }
       }
-      core.info(`[OK] Commit ${commit.sha} of type ${cAst.type} - ${cAst.subject}`)
+      core.info(
+        `[OK] Commit ${commit.sha} of type ${cAst.type} - ${cAst.subject}`
+      );
     } catch (err) {
+      core.info(`[ERROR] ${err}`);
       if (includeInvalidCommits) {
         commitsParsed.push({
-          type: 'other',
+          type: "other",
           subject: commit.commit.message,
           sha: commit.sha,
           url: commit.html_url,
-          author: _.get(commit, 'author.login'),
-          authorUrl: _.get(commit, 'author.html_url')
-        })
-        core.info(`### RADH ### [OK] Commit ${commit.sha} with invalid type, falling back to other - ${commit.commit.message}`)
+          author: _.get(commit, "author.login"),
+          authorUrl: _.get(commit, "author.html_url"),
+        });
+        core.info(
+          `[OK] Commit ${commit.sha} with invalid type, falling back to other - ${commit.commit.message}`
+        );
       } else {
-        core.info(`[INVALID] Skipping commit ${commit.sha} as it doesn't follow conventional commit format.`)
+        core.info(
+          `[INVALID] Skipping commit ${commit.sha} as it doesn't follow conventional commit format.`
+        );
       }
     }
   }
