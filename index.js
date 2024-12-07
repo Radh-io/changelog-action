@@ -91,7 +91,7 @@ async function main () {
 
     // GET LATEST + PREVIOUS TAGS
 
-    core.info(`Using input tag: ${tag}`)
+    core.info(`### RADH ### Using input tag: ${tag}`)
 
     const tagsRaw = await gh.graphql(`
       query lastTags ($owner: String!, $repo: String!) {
