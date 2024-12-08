@@ -27998,6 +27998,11 @@ async function main () {
   const owner = github.context.repo.owner;
   const repo = github.context.repo.repo;
   const currentISODate = new Date().toISOString().substring(0, 10);
+  const maxTagsToFetch = _.toSafeInteger(
+    core.getInput("maxTagsToFetch") || 1000
+  );
+  const fetchLimit =
+    maxTagsToFetch < 1 || maxTagsToFetch > 1000 ? 1000 : maxTagsToFetch;
 
   let latestTag = null;
   let previousTag = null;
