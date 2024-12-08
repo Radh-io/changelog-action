@@ -28070,8 +28070,8 @@ async function main () {
     }
 
     let idx = 0;
-    for (const _tag of allTags) {
-      if (prefix) {
+    if (prefix) {
+      for (const _tag of allTags) {
         core.info(`tags ${_tag.name}`);
         // Get first instance of tag that matches prefix then get second instance.
         if (latestTag) {
@@ -28088,10 +28088,10 @@ async function main () {
         }
         idx++;
       }
+    } else {
+      latestTag = allTags[0];
+      previousTag = allTags[1];
     }
-
-    // latestTag = _.get(tagsRaw, "repository.refs.nodes[0]");
-    // previousTag = _.get(tagsRaw, "repository.refs.nodes[1]");
 
     if (!previousTag) {
       return core.setFailed(

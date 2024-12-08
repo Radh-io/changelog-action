@@ -50,6 +50,14 @@ inputs:
     description: List commits in reverse order (from newer to older) instead of the default (older to newer).
     required: false
     default: 'false'
+  prefix:
+    description: When set, tags are filtered by the prefix. Useful for mono-repos.
+    required: false
+    default: ''
+  maxTagsToFetch:
+    description: Maximum number of tags to fetch. Useful for mono-repos in conjunction with the prefix.
+    required: false
+    default: 1000
 outputs:
   changes:
     description: Generated changelog
