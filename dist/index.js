@@ -27973,24 +27973,34 @@ function buildSubject ({ writeToFile, subject, author, authorUrl, owner, repo })
 async function main () {
   const token = core.getInput('token')
   const tag = core.getInput('tag')
-  const fromTag = core.getInput('fromTag')
-  const toTag = core.getInput('toTag')
-  const excludeTypes = (core.getInput('excludeTypes') || '').split(',').map(t => t.trim()).filter(t => t)
-  const excludeScopes = (core.getInput('excludeScopes') || '').split(',').map(t => t.trim()).filter(t => t)
-  const restrictToTypes = (core.getInput('restrictToTypes') || '').split(',').map(t => t.trim()).filter(t => t)
-  const writeToFile = core.getBooleanInput('writeToFile')
-  const changelogFilePath = core.getInput('changelogFilePath')
-  const includeRefIssues = core.getBooleanInput('includeRefIssues')
-  const useGitmojis = core.getBooleanInput('useGitmojis')
-  const includeInvalidCommits = core.getBooleanInput('includeInvalidCommits')
-  const reverseOrder = core.getBooleanInput('reverseOrder')
-  const gh = github.getOctokit(token)
-  const owner = github.context.repo.owner
-  const repo = github.context.repo.repo
-  const currentISODate = (new Date()).toISOString().substring(0, 10)
+  const prefix = core.getInput("prefix");
+  const fromTag = core.getInput("fromTag");
+  const toTag = core.getInput("toTag");
+  const excludeTypes = (core.getInput("excludeTypes") || "")
+    .split(",")
+    .map((t) => t.trim())
+    .filter((t) => t);
+  const excludeScopes = (core.getInput("excludeScopes") || "")
+    .split(",")
+    .map((t) => t.trim())
+    .filter((t) => t);
+  const restrictToTypes = (core.getInput("restrictToTypes") || "")
+    .split(",")
+    .map((t) => t.trim())
+    .filter((t) => t);
+  const writeToFile = core.getBooleanInput("writeToFile");
+  const changelogFilePath = core.getInput("changelogFilePath");
+  const includeRefIssues = core.getBooleanInput("includeRefIssues");
+  const useGitmojis = core.getBooleanInput("useGitmojis");
+  const includeInvalidCommits = core.getBooleanInput("includeInvalidCommits");
+  const reverseOrder = core.getBooleanInput("reverseOrder");
+  const gh = github.getOctokit(token);
+  const owner = github.context.repo.owner;
+  const repo = github.context.repo.repo;
+  const currentISODate = new Date().toISOString().substring(0, 10);
 
-  let latestTag = null
-  let previousTag = null
+  let latestTag = null;
+  let previousTag = null;
 
   if (tag && (fromTag || toTag)) {
     return core.setFailed(
@@ -27998,38 +28008,86 @@ async function main () {
     );
   } else if (tag) {
     // GET LATEST + PREVIOUS TAGS
-
+    let hasNextPage = true;
+    let cursor = null;
+    let allTags = [];
     core.info(`Using input tag: ${tag}`);
 
-    const tagsRaw = await gh.graphql(
-      `
-      query lastTags ($owner: String!, $repo: String!) {
-        repository (owner: $owner, name: $repo) {
-          refs(first: 2, refPrefix: "refs/tags/", orderBy: { field: TAG_COMMIT_DATE, direction: DESC }) {
-            nodes {
-              name
-              target {
-                oid
+    while (hasNextPage) {
+      const tagsRaw = await gh.graphql(
+        `
+        query lastTags(
+          $owner: String!
+          $repo: String!
+          $fetchLimit: Int!
+          $cursor: String
+        ) {
+          repository(owner: $owner, name: $repo) {
+            refs(
+              first: $fetchLimit
+              refPrefix: "refs/tags/"
+              orderBy: { field: TAG_COMMIT_DATE, direction: DESC }
+              after: $cursor
+            ) {
+              nodes {
+                name
+                target {
+                  oid
+                }
+              }
+              pageInfo {
+                hasNextPage
+                endCursor
               }
             }
           }
         }
-      }
-    `,
-      {
-        owner,
-        repo,
-      }
-    );
+      `,
+        {
+          owner,
+          repo,
+          fetchLimit: Math.min(100, fetchLimit), // GitHub max per page is 100
+          cursor,
+        }
+      );
 
-    latestTag = _.get(tagsRaw, "repository.refs.nodes[0]");
-    previousTag = _.get(tagsRaw, "repository.refs.nodes[1]");
+      const newTags = _.get(tagsRaw, "repository.refs.nodes", []);
+      const pageInfo = _.get(tagsRaw, "repository.refs.pageInfo", {});
+      allTags.push(...newTags);
+      hasNextPage = pageInfo.hasNextPage && allTags.length < fetchLimit;
+      cursor = pageInfo.endCursor;
+    }
 
-    if (!latestTag) {
+    if (allTags.length < 1) {
       return core.setFailed(
         "Couldn't find the latest tag. Make sure you have an existing tag already before creating a new one."
       );
     }
+
+    let idx = 0;
+    for (const _tag of allTags) {
+      if (prefix) {
+        core.info(`tags ${_tag.name}`);
+        // Get first instance of tag that matches prefix then get second instance.
+        if (latestTag) {
+          if (_tag.name.indexOf(prefix) === 0) {
+            previousTag = _tag;
+            break;
+          }
+        } else {
+          if (_tag.name.indexOf(prefix) === 0) {
+            latestTag = _tag;
+          } else {
+            continue;
+          }
+        }
+        idx++;
+      }
+    }
+
+    // latestTag = _.get(tagsRaw, "repository.refs.nodes[0]");
+    previousTag = _.get(tagsRaw, "repository.refs.nodes[1]");
+
     if (!previousTag) {
       return core.setFailed(
         "Couldn't find a previous tag. Make sure you have at least 2 tags already (current tag + previous initial tag)."
