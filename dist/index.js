@@ -28091,7 +28091,7 @@ async function main () {
     }
 
     // latestTag = _.get(tagsRaw, "repository.refs.nodes[0]");
-    previousTag = _.get(tagsRaw, "repository.refs.nodes[1]");
+    // previousTag = _.get(tagsRaw, "repository.refs.nodes[1]");
 
     if (!previousTag) {
       return core.setFailed(
